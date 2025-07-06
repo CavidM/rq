@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import {OfflineBanner} from "../../../features/offline-banner/OfflineBanner";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -15,6 +16,7 @@ const mainStyle = { padding: '20px' };
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   return (
     <div className="app-layout">
+        <OfflineBanner/>
       <nav style={navStyle}>
         <Link to="/" style={linkStyle}>Home</Link>
         <Link to="/about" style={linkStyle}>About</Link>
@@ -25,4 +27,4 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       </main>
     </div>
   );
-}; 
+};
