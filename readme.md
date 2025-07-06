@@ -13,6 +13,8 @@ const [formData, setFormData] = useState({ name: '', email: '' });
 const [theme, setTheme] = useState('dark');
 
 // Filters and search (often best in URL for sharing/bookmarking)
+// This comes from react-router-dom
+import { useSearchParams } from 'react-router-dom';
 const [searchParams, setSearchParams] = useSearchParams();
 const searchTerm = searchParams.get('search') || '';
 const categoryFilter = searchParams.get('category') || 'all';
@@ -128,6 +130,8 @@ const { data: products, isLoading, error } = useQuery({
 
 ## 1. Different Query Keys Even with Same API
 
+📖 **Reference:** [Query Keys](https://tanstack.com/query/latest/docs/framework/react/guides/query-keys)
+
 ### ❌ Wrong - Conflicting Cache Options
 ```typescript
 // useProducts.ts
@@ -168,52 +172,64 @@ const { data: products } = useQuery({
 
 ## 2. StaleTime vs GcTime - Simple Explanation
 
-### High-Level Concepts
-- **staleTime**: How long data stays "fresh" (won't refetch)
-- **gcTime**: How long unused data stays in memory
+📖 **Reference:** [Important Defaults](https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults) | [Caching](https://tanstack.com/query/latest/docs/framework/react/guides/caching)
 
-### ❌ Confusing Configuration
-```typescript
-const { data } = useQuery({
-  queryKey: ['user'],
-  queryFn: fetchUser,
-  staleTime: 1 * 60 * 1000,    // 1 minute fresh
-  gcTime: 30 * 1000            // ⚠️ 30 seconds in memory - shorter than staleTime!
-});
-```
+### What They Control
 
-### ✅ Logical Configuration
-```typescript
-const { data } = useQuery({
-  queryKey: ['user'],
-  queryFn: fetchUser,
-  staleTime: 1 * 60 * 1000,    // 1 minute fresh
-  gcTime: 5 * 60 * 1000        // 5 minutes in memory (longer than staleTime)
-});
+**staleTime** - Controls automatic refetching behavior
+- Think: "How long should I trust this data?"
+- While fresh: React Query won't refetch automatically (on window focus, remount, etc.)
+- When stale: React Query will refetch when it gets a chance
 
-// Common patterns:
-// Real-time data: staleTime: 0, gcTime: 30 * 1000
-// Static data: staleTime: 5 * 60 * 1000, gcTime: 10 * 60 * 1000
-// User data: staleTime: 1 * 60 * 1000, gcTime: 5 * 60 * 1000
-```
+**gcTime** - Controls memory cleanup (formerly `cacheTime` in v4)
+- Think: "How long should I keep this data in memory?"
+- While in memory: Instant loading when you revisit the same data
+- After cleanup: Need to fetch from scratch again
 
-**Rule:** gcTime should be longer than staleTime for optimal caching.
+### Step-by-Step Example: User Profile Data
 
-## 3. Object Destructuring Side Effects
+Let's say you have user profile data with:
+- **staleTime: 2 minutes** → "Trust this data for 2 minutes"
+- **gcTime: 10 minutes** → "Keep it in memory for 10 minutes"
 
-### ❌ Bad - Destructuring Everything
+**Here's what happens:**
+
+1. **0:00** - User visits profile page
+   - React Query fetches user data
+   - Data is **fresh** and stored in memory
+
+2. **0:30** - User navigates away and comes back
+   - Data is still **fresh** (under 2 minutes)
+   - No refetch happens, loads instantly from memory
+
+3. **2:30** - User visits profile page again
+   - Data is now **stale** (over 2 minutes)
+   - Shows cached data immediately, then refetches in background
+
+4. **10:30** - User visits profile page again
+   - Data was **garbage collected** (over 10 minutes)
+   - Shows loading spinner, fetches from scratch
+
+### Key Rule
+Make `gcTime` longer than `staleTime` - otherwise you'll lose cached data before it even becomes stale!
+
+## 3. Rest Destructuring Breaks Field Tracking
+
+📖 **Reference:** [Render Optimizations](https://tanstack.com/query/latest/docs/framework/react/guides/render-optimizations) | [ESLint Plugin](https://tanstack.com/query/latest/docs/eslint/no-rest-destructuring)
+
+### ❌ Bad - Rest Destructuring All Fields
 ```typescript
 const ProductList = () => {
-  // This creates new objects on every render!
+  // This subscribes to ALL fields, breaking React Query's optimization!
   const { data, isLoading, error, refetch, ...rest } = useQuery({
     queryKey: ['products'],
     queryFn: api.products.getAll
   });
 
-  // Problem: `rest` object changes on every render
+  // Problem: Component re-renders when ANY field changes
   useEffect(() => {
     console.log('Effect runs on every render!');
-  }, [rest]); // ⚠️ Infinite re-renders
+  }, [rest]); // ⚠️ Triggers re-renders on any query field change — even if you don't use those fields
 
   return <div>{/* ... */}</div>;
 };
@@ -244,76 +260,154 @@ const ProductList = () => {
 };
 ```
 
-**Why:** Destructuring creates new objects, causing unnecessary re-renders.
+**Why:** Rest destructuring disables React Query's [tracked queries optimization](https://tanstack.com/query/v5/docs/framework/react/guides/render-optimizations#tracked-properties), causing unnecessary re-renders when any field changes.
 
-## 4. Default Network Mode vs Always Mode
+**ESLint Rule:** Use [`@tanstack/query/no-rest-destructuring`](https://tanstack.com/query/v5/docs/eslint/no-rest-destructuring) to catch this automatically.
 
-### ✅ Default Network Mode (Recommended)
+## 4. Understanding Network Modes
+
+📖 **Reference:** [Network Mode](https://tanstack.com/query/latest/docs/framework/react/guides/network-mode) | [Offline React Query](https://tkdodo.eu/blog/offline-react-query)
+
+React Query has three network modes that control how queries behave when offline:
+
+### `networkMode: 'online'` (Default)
+- Queries pause when offline
+- Resume when back online
+- Best for API calls
+
+### `networkMode: 'always'`
+- Queries run regardless of network status
+- Best for local operations (AsyncStorage, computations)
+- Set `retry: false` to avoid unnecessary retries
+
+### `networkMode: 'offlineFirst'`
+- Tries once, then pauses if fails while offline
+- Best for PWAs with service workers or HTTP caching
+
+### ✅ Good - Default Mode for API Calls
 ```typescript
-const { data } = useQuery({
-  queryKey: ['products'],
-  queryFn: api.products.getAll,
-  // networkMode: 'online' (default)
-  // refetchOnReconnect: true (default)
-});
+const ProductList = () => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['products'],
+    queryFn: api.products.getAll
+    // networkMode: 'online' is the default
+  });
 
-// Benefits:
-// - Pauses queries when offline
-// - Automatically retries when back online
-// - Prevents failed network requests
-// - Better UX with loading states
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+  return <div>{/* products */}</div>;
+};
 ```
 
-### Always Mode (Alternative Approach)
+### ✅ Good - Always Mode for Local Operations
 ```typescript
+// React Native AsyncStorage (local storage)
 const { data } = useQuery({
-  queryKey: ['products'],
-  queryFn: api.products.getAll,
-  networkMode: 'always',
-  refetchOnReconnect: true   // ✅ Works with 'always'
-});
-
-// Characteristics:
-// - Always attempts to fetch, even offline
-// - Shows actual network failures
-// - Useful for debugging network issues
-// - Different UX approach
-```
-
-### When to Use Always Mode
-```typescript
-// Only for special cases like:
-const { data } = useQuery({
-  queryKey: ['cached-data'],
-  queryFn: fetchFromLocalStorage, // Not network dependent
-  networkMode: 'always'
-});
-
-// Or when you want to see network failures for debugging
-const { data } = useQuery({
-  queryKey: ['debug-network'],
-  queryFn: api.getData,
-  networkMode: 'always',  // See actual network requests fail
-  refetchOnReconnect: false
+  queryKey: ['user-settings'],
+  queryFn: () => AsyncStorage.getItem('settings'),
+  networkMode: 'always',     // This doesn't need network
+  refetchOnReconnect: false, // Network reconnection is irrelevant
+  retry: false               // Don't retry local operations
 });
 ```
 
-**Default is Better:** Modern React Query handles network state smartly. Use `networkMode: 'always'` only for non-network queries or debugging.
+### ✅ Handling Offline States in UI
+```typescript
+const ProductList = () => {
+  const { data, isLoading, error, fetchStatus } = useQuery({
+    queryKey: ['products'],
+    queryFn: api.products.getAll
+  });
 
-## Quick Reference
+  // Handle the paused state properly
+  if (fetchStatus === 'paused') {
+    return <div>📡 Offline - {data ? 'showing cached data' : 'no data available'}</div>;
+  }
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+  return <div>{/* products */}</div>;
+};
+```
+
+**Note:** `fetchStatus` reflects whether the query is actively fetching (`fetching`, `paused`, or `idle`). `status` reflects the result (`loading`, `success`, `error`).
+
+### ✅ Better - Global Offline Banner
+```typescript
+// hooks/useNetworkStatus.ts
+import { onlineManager } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+
+export const useNetworkStatus = () => {
+  const [isOnline, setIsOnline] = useState(onlineManager.isOnline());
+
+  useEffect(() => {
+    const unsubscribe = onlineManager.subscribe((online) => {
+      setIsOnline(online);
+    });
+    return unsubscribe;
+  }, []);
+
+  return { isOnline };
+};
+
+// components/OfflineBanner.tsx
+const OfflineBanner = () => {
+  const { isOnline } = useNetworkStatus();
+  
+  if (isOnline) return null;
+  return (
+    <div style={{background: '#f59e0b', padding: '8px', textAlign: 'center'}}>
+      📡 You're offline - showing cached data
+    </div>
+  );
+};
+```
+
+**Solution:** Single global banner + clean components that focus on their data.
+
+## 5. Understanding Status vs FetchStatus
+
+📖 **Reference:** [useQuery](https://tanstack.com/query/latest/docs/framework/react/reference/useQuery)
+
+React Query tracks two separate states that work together:
+
+### `status` - What data do we have?
+- `pending` - No data yet, never fetched successfully
+- `success` - Has data (might be stale)
+- `error` - Has an error (might also have stale data)
+
+### `fetchStatus` - What's happening with the network request?
+- `fetching` - Actively making a network request
+- `paused` - Should be fetching but is paused (offline)
+- `idle` - Not currently fetching
+
+### Key Insight: They're Independent!
+You can be in `success` status while `fetching` new data, or in `pending` status while `paused` offline.
+
+### ✅ Common Pattern - What Most Apps Do
+```typescript
+const ProductList = () => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['products'],
+    queryFn: api.products.getAll
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+  return <div>{data.map(product => <div key={product.id}>{product.name}</div>)}</div>;
+};
+```
+
+**Simple and works great for most use cases.**
+
+## Quick Reference Table
 
 | Concept | Default | Good Practice |
 |---------|---------|---------------|
 | **Query Keys** | `['data']` | `['data', 'specific-purpose']` |
 | **staleTime** | `0` | `1 * 60 * 1000` (1 min) for user data |
 | **gcTime** | `5 * 60 * 1000` | `10 * 60 * 1000` (10 min) for cached data |
-| **networkMode** | `'online'` | Keep default unless debugging |
+| **networkMode** | `'online'` | Keep default for API calls |
+| **Offline Handling** | No handling | Use `fetchStatus === 'paused'` |
 | **Destructuring** | `const {...all}` | `const {data, isLoading}` |
-
-## Workshop Teaching Points
-
-1. **Show the console logs** when mount order causes cache conflicts
-2. **Demonstrate offline behavior** with default vs always mode
-3. **Use React DevTools** to show unnecessary re-renders from destructuring
-4. **Explain timing relationships** between staleTime and gcTime with diagrams
-5. **Live code examples** showing query key conflicts and their fixes

@@ -6,7 +6,11 @@ interface ProductDetailProps {
 }
 
 export const ProductDetail: React.FC<ProductDetailProps> = ({ productId }) => {
-  const { data: product, isLoading, error } = useProduct(productId || 0);
+  const { data: product, isLoading, error, fetchStatus, status } = useProduct(productId || 0);
+
+  if (fetchStatus === 'paused' && !product) {
+    return <div>📡 Offline - {'no data available'}</div>;
+  }
 
   if (!productId) {
     return (
@@ -43,4 +47,4 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId }) => {
       </div>
     </div>
   );
-}; 
+};
