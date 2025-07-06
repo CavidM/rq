@@ -1,6 +1,6 @@
 # React Query Best Practices & Common Pitfalls
 
-🚀 **Live Examples:** [StackBlitz Playground](https://stackblitz.com/~/github.com/CavidM/rq)
+🚀 **Live Examples:** <a href="https://stackblitz.com/~/github.com/CavidM/rq" target="_blank">StackBlitz Playground</a>
 
 ## Understanding Device vs Server Data
 
