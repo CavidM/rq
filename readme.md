@@ -142,7 +142,7 @@ const { data: categories } = useQuery({
   queryKey: ['products'],        // ⚠️ Same key, different needs!
   queryFn: api.products.getAll,
   select: (products) => getPopularCategories(products),
-  gcTime: 300000  // 5 minutes - conflicts with above
+  gcTime: 5 * 60 * 1000  // 5 minutes - conflicts with above
 });
 ```
 
@@ -160,7 +160,7 @@ const { data: products } = useQuery({
   queryKey: ['popular-categories'],  // Different purpose
   queryFn: api.products.getAll,
   select: (products) => getPopularCategories(products),
-  gcTime: 300000
+  gcTime: 5 * 60 * 1000
 });
 ```
 
@@ -177,8 +177,8 @@ const { data: products } = useQuery({
 const { data } = useQuery({
   queryKey: ['user'],
   queryFn: fetchUser,
-  staleTime: 60000,    // 1 minute fresh
-  gcTime: 30000        // ⚠️ 30 seconds in memory - shorter than staleTime!
+  staleTime: 1 * 60 * 1000,    // 1 minute fresh
+  gcTime: 30 * 1000            // ⚠️ 30 seconds in memory - shorter than staleTime!
 });
 ```
 
@@ -187,14 +187,14 @@ const { data } = useQuery({
 const { data } = useQuery({
   queryKey: ['user'],
   queryFn: fetchUser,
-  staleTime: 60000,    // 1 minute fresh
-  gcTime: 300000       // 5 minutes in memory (longer than staleTime)
+  staleTime: 1 * 60 * 1000,    // 1 minute fresh
+  gcTime: 5 * 60 * 1000        // 5 minutes in memory (longer than staleTime)
 });
 
 // Common patterns:
-// Real-time data: staleTime: 0, gcTime: 30000
-// Static data: staleTime: 300000, gcTime: 600000
-// User data: staleTime: 60000, gcTime: 300000
+// Real-time data: staleTime: 0, gcTime: 30 * 1000
+// Static data: staleTime: 5 * 60 * 1000, gcTime: 10 * 60 * 1000
+// User data: staleTime: 1 * 60 * 1000, gcTime: 5 * 60 * 1000
 ```
 
 **Rule:** gcTime should be longer than staleTime for optimal caching.
@@ -305,8 +305,8 @@ const { data } = useQuery({
 | Concept | Default | Good Practice |
 |---------|---------|---------------|
 | **Query Keys** | `['data']` | `['data', 'specific-purpose']` |
-| **staleTime** | `0` | `60000` (1 min) for user data |
-| **gcTime** | `300000` | `600000` (10 min) for cached data |
+| **staleTime** | `0` | `1 * 60 * 1000` (1 min) for user data |
+| **gcTime** | `5 * 60 * 1000` | `10 * 60 * 1000` (10 min) for cached data |
 | **networkMode** | `'online'` | Keep default unless debugging |
 | **Destructuring** | `const {...all}` | `const {data, isLoading}` |
 
