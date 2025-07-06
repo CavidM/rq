@@ -1,5 +1,7 @@
 # React Query Best Practices & Common Pitfalls
 
+🚀 **Live Examples:** [StackBlitz Playground](https://stackblitz.com/~/github.com/CavidM/rq)
+
 ## Understanding Device vs Server Data
 
 ### Device (Client) State
