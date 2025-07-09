@@ -413,3 +413,9 @@ const ProductList = () => {
 | **networkMode** | `'online'` | Keep default for API calls |
 | **Offline Handling** | No handling | Use `fetchStatus === 'paused'` |
 | **Destructuring** | `const {...all}` | `const {data, isLoading}` |
+
+
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
